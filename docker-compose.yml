@@ -1,0 +1,65 @@
+services:
+  postgres:
+      container_name: postgres 
+      image: postgres:17
+      environment:
+        - POSTGRES_DB=${POSTGRES_DB}
+        - POSTGRES_USER=${POSTGRES_USER} 
+        - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      ports:
+        - "5432:5432"
+      healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+        interval: 5s
+        timeout: 5s
+        retries: 5
+  
+  arduino:
+    container_name: arduino
+    # image: filipus01/gps-tracker:1.1.0
+    build:
+      context: .
+      dockerfile: dockerfile
+    environment:
+      - CONNECTION_STRING=${CONNECTION_STRING}
+      - REACT_CLIENT_URL=${REACT_CLIENT_URL}
+      - BACKEND_URL=${BACKEND_URL}
+      - ELASTIC_URL=${ELASTIC_URL}
+      - GNSS_INDEX=${GNSS_INDEX}
+      - MQTT_HOST=${MQTT_HOST}
+      - MQTT_PORT=${MQTT_PORT}
+    ports: 
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy 
+
+  rabbit:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    command: >
+      bash -c "rabbitmq-plugins enable rabbitmq_mqtt 
+      && rabbitmq-server"
+    ports: 
+      - "5672:5672"
+      - "15672:15672"
+      - "1883:1883"
+  
+  elastic:
+    container_name: elastic
+    image: elasticsearch:8.15.1
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g 
+    volumes:
+      - ./elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+  kibana:
+    container_name: kibana
+    image: kibana:8.15.1
+    ports:
+      - "5601:5601"
+    environment:
+      ELASTICSEARCH_HOSTS: http://elastic:9200
